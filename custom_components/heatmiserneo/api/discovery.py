@@ -168,7 +168,10 @@ class AIOHeatmiserDiscovery:
             remain_time = quit_time - time.monotonic()
 
     async def async_scan(
-        self, timeout: int = 10, address: str | None = None
+        self,
+        timeout: int = 10,
+        address: str | None = None,
+        targetted_address: bool = True,
     ) -> list[NeoHubDetails]:
         """Discover NeoHub devices."""
         _LOGGER.debug("Starting NeoHub discovery with timeout %ds", timeout)
@@ -180,7 +183,7 @@ class AIOHeatmiserDiscovery:
 
         def _on_response(data: bytes, addr: tuple[str, int]) -> None:
             _LOGGER.debug("discover: %s <= %s", addr, data)
-            if self._process_response(data, addr, response_list, address is not None):
+            if self._process_response(data, addr, response_list, targetted_address):
                 found_all_future.set_result(True)
 
         transport, _ = await asyncio.get_running_loop().create_datagram_endpoint(

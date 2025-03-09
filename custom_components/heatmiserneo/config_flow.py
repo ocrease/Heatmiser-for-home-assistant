@@ -37,10 +37,12 @@ from homeassistant.helpers.typing import DiscoveryInfoType
 from . import HeatmiserNeoConfigEntry, hold_duration_validation
 from .api.discovery import NeoHubConnectDetails, NeoHubDetails
 from .const import (
-    CONF_CONN_METHOD_AUTO_CONNECT,
     CONF_CONN_METHOD_LEGACY,
     CONF_CONN_METHOD_WEBSOCKET,
     CONF_DEFAULTS,
+    CONF_DISCOVERY_METHOD_AUTO_CONNECT,
+    CONF_DISCOVERY_METHOD_HUBSEEK,
+    CONF_DISCOVERY_METHOD_MANUAL,
     CONF_HVAC_MODES,
     CONF_STAT_HOLD_DURATION,
     CONF_STAT_HOLD_TEMP,
@@ -62,7 +64,6 @@ from .const import (
     GlobalSystemType,
 )
 from .discovery import (
-    async_discover_device,
     async_discover_device_connection_details,
     async_discover_devices,
     async_update_entry_from_discovery,
@@ -131,13 +132,6 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
     ) -> tuple[ConfigFlowResult, dict[str, str]]:
         errors = {}
 
-        if (
-            not self._discovered_device
-            or user_input[CONF_HOST] != self._discovered_device.ip_address
-        ):
-            if device := await async_discover_device(self.hass, user_input[CONF_HOST]):
-                self._discovered_device = device
-
         self.host = user_input[CONF_HOST]
         self._port = user_input[CONF_PORT]
         self._token = user_input.get(CONF_API_TOKEN)
@@ -162,53 +156,22 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Handle the initial step."""
-        if user_input is not None:
-            if mac := user_input[CONF_DEVICE]:
-                await self.async_set_unique_id(mac, raise_on_progress=False)
-                self._discovered_device = self._discovered_devices[mac]
-            return await self.async_step_choose_conn_method()
+        return await self.async_step_choose_discovery_method()
 
-        current_unique_ids = self._async_current_ids()
-        current_hosts = {
-            entry.data[CONF_HOST]
-            for entry in self._async_current_entries(include_ignore=False)
-        }
-        discovered_devices = await async_discover_devices(
-            self.hass, DISCOVER_SCAN_TIMEOUT
-        )
-        self._discovered_devices = {
-            dr.format_mac(device.mac_address): device for device in discovered_devices
-        }
-        devices_name: dict[str | None, str] = {
-            mac: f"{device.mac_address} ({device.ip_address})"
-            for mac, device in self._discovered_devices.items()
-            if mac not in current_unique_ids and device.ip_address not in current_hosts
-        }
-        if not devices_name:
-            return await self.async_step_choose_conn_method()
-        devices_name[None] = "Manual Entry"
-        return self.async_show_form(
-            step_id="user",
-            data_schema=vol.Schema({vol.Required(CONF_DEVICE): vol.In(devices_name)}),
-        )
-
-    async def async_step_choose_conn_method(
+    async def async_step_choose_discovery_method(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Show menu to select websocket or legacy api."""
         return self.async_show_menu(
-            step_id="choose_conn_method",
+            step_id="choose_discovery_method",
             menu_options=[
-                CONF_CONN_METHOD_AUTO_CONNECT,
-                CONF_CONN_METHOD_WEBSOCKET,
-                CONF_CONN_METHOD_LEGACY,
+                CONF_DISCOVERY_METHOD_AUTO_CONNECT,
+                CONF_DISCOVERY_METHOD_HUBSEEK,
+                CONF_DISCOVERY_METHOD_MANUAL,
             ],
-            # description_placeholders=_placeholders_from_device(self._discovered_device)
-            # if self._discovered_device
-            # else None,
         )
 
-    async def async_step_conn_method_auto_connect(
+    async def async_step_discovery_method_auto_connect(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Handle connection using connect button on hub."""
@@ -229,14 +192,14 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
 
         if connect_details and isinstance(connect_details, NeoHubConnectDetails):
             return self.async_show_progress_done(
-                next_step_id=CONF_CONN_METHOD_AUTO_CONNECT + "_finish"
+                next_step_id=CONF_DISCOVERY_METHOD_AUTO_CONNECT + "_finish"
             )
 
         return self.async_show_progress_done(
-            next_step_id=CONF_CONN_METHOD_AUTO_CONNECT + "_failed"
+            next_step_id=CONF_DISCOVERY_METHOD_AUTO_CONNECT + "_failed"
         )
 
-    async def async_step_conn_method_auto_connect_finish(
+    async def async_step_discovery_method_auto_connect_finish(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Handle connection using connect button on hub."""
@@ -274,12 +237,65 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
                 return result
         return self.async_abort(reason="auto_connect_timeout")
 
-    async def async_step_conn_method_auto_connect_failed(
+    async def async_step_discovery_method_auto_connect_failed(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Abort auto connect failed."""
         self.auto_connect_task = None
         return self.async_abort(reason="auto_connect_timeout")
+
+    async def async_step_discovery_method_hubseek(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle the initial step."""
+        if user_input is not None:
+            if mac := user_input[CONF_DEVICE]:
+                await self.async_set_unique_id(mac, raise_on_progress=False)
+                self._discovered_device = self._discovered_devices[mac]
+            return await self.async_step_choose_conn_method()
+
+        current_unique_ids = self._async_current_ids()
+        current_hosts = {
+            entry.data[CONF_HOST]
+            for entry in self._async_current_entries(include_ignore=False)
+        }
+        discovered_devices = await async_discover_devices(
+            self.hass, DISCOVER_SCAN_TIMEOUT
+        )
+        self._discovered_devices = {
+            dr.format_mac(device.mac_address): device for device in discovered_devices
+        }
+        if not discovered_devices:
+            return self.async_abort(reason="no_devices_discovered")
+        devices_name: dict[str | None, str] = {
+            mac: f"{device.mac_address} ({device.ip_address})"
+            for mac, device in self._discovered_devices.items()
+            if mac not in current_unique_ids and device.ip_address not in current_hosts
+        }
+        if not devices_name:
+            return self.async_abort(reason="no_new_devices_discovered")
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema({vol.Required(CONF_DEVICE): vol.In(devices_name)}),
+        )
+
+    async def async_step_discovery_method_manual(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle the initial step."""
+        return await self.async_step_choose_conn_method()
+
+    async def async_step_choose_conn_method(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Show menu to select websocket or legacy api."""
+        return self.async_show_menu(
+            step_id="choose_conn_method",
+            menu_options=[
+                CONF_CONN_METHOD_WEBSOCKET,
+                CONF_CONN_METHOD_LEGACY,
+            ],
+        )
 
     async def async_step_conn_method_websocket(
         self, user_input: dict[str, Any] | None = None

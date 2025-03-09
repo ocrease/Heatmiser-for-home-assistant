@@ -61,9 +61,6 @@ async def async_setup(hass: HomeAssistant, hass_config: ConfigType) -> bool:
             hass, await async_discover_devices(hass, DISCOVER_SCAN_TIMEOUT)
         )
 
-    hass.async_create_background_task(
-        _async_discovery(), "heatmiserneo setup discovery"
-    )
     async_track_time_interval(
         hass, _async_discovery, DISCOVERY_INTERVAL, cancel_on_shutdown=True
     )
@@ -81,12 +78,20 @@ async def async_setup_entry(
     token = entry.data.get(CONF_API_TOKEN)
 
     if not unique_id_is_mac(entry.unique_id):
-        _LOGGER.debug(
-            "Unique id for %s is missing during setup or it is not a MAC address, trying to fill from discovery",
-            host,
+
+        async def attempt_discovery():
+            _LOGGER.debug(
+                "Unique id for %s is missing during setup or it is not a MAC address, trying to fill from discovery",
+                host,
+            )
+            if device := await async_discover_device(hass, host):
+                async_update_entry_from_discovery(hass, entry, device)
+
+        entry.async_create_background_task(
+            hass,
+            target=attempt_discovery(),
+            name=f"heatmiserneo config entry unique id discovery for entry {entry.entry_id}",
         )
-        if device := await async_discover_device(hass, host):
-            async_update_entry_from_discovery(hass, entry, device)
 
     await _async_migrate_unique_ids(hass, entry)
 
