@@ -11,11 +11,12 @@ import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_API_TOKEN, CONF_HOST, CONF_PORT, Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import CoreState, HomeAssistant
 import homeassistant.helpers.config_validation as cv
 import homeassistant.helpers.device_registry as dr
 import homeassistant.helpers.entity_registry as er
 from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.typing import ConfigType
 
 from .const import DISCOVER_SCAN_TIMEOUT, DISCOVERY_INTERVAL, DOMAIN
@@ -79,7 +80,7 @@ async def async_setup_entry(
 
     if not unique_id_is_mac(entry.unique_id):
 
-        async def attempt_discovery():
+        async def attempt_discovery(hass: HomeAssistant):
             _LOGGER.debug(
                 "Unique id for %s is missing during setup or it is not a MAC address, trying to fill from discovery",
                 host,
@@ -87,11 +88,10 @@ async def async_setup_entry(
             if device := await async_discover_device(hass, host):
                 async_update_entry_from_discovery(hass, entry, device)
 
-        entry.async_create_background_task(
-            hass,
-            target=attempt_discovery(),
-            name=f"heatmiserneo config entry unique id discovery for entry {entry.entry_id}",
-        )
+        if hass.state is CoreState.running:
+            await attempt_discovery(hass)
+        else:
+            entry.async_on_unload(async_at_started(hass, attempt_discovery))
 
     await _async_migrate_unique_ids(hass, entry)
 
