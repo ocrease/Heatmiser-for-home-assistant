@@ -101,9 +101,22 @@
             }
           }
         }
+      },
+      "pairing": {
+        "title": "Pair a new device",
+        "description": "Puts the hub in pairing mode. Set the name of the new device to set up and follow the steps on the device itself",
+        "data": {
+          "name": "Zone name"
+        },
+        "data_description": {
+          "name": "Zone name of the new device to pair"
+        }
       }
     },
-    "error": {}
+    "error": {},
+    "abort": {
+      "finish_pairing": "To actually join network you need to select 01 from the thermostat's setup menu within 120 seconds"
+    }
   },
   "entity": {
     "climate": {

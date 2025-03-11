@@ -38,6 +38,7 @@ CONF_DISCOVERY_METHOD_MANUAL = "discovery_method_manual"
 
 CONF_DEFAULTS = "defaults"
 CONF_HVAC_MODES = "hvac_modes"
+CONF_PAIRING = "pairing"
 CONF_TIMER_OPTIONS = "timer_options"
 CONF_THERMOSTAT_OPTIONS = "thermostat_options"
 CONF_STAT_HOLD_DURATION = "stat_hold_duration"

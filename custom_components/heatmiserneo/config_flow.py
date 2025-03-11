@@ -16,7 +16,7 @@ import voluptuous as vol
 
 from homeassistant.components.climate import UnitOfTemperature
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult, OptionsFlow
-from homeassistant.const import CONF_API_TOKEN, CONF_HOST, CONF_PORT
+from homeassistant.const import CONF_API_TOKEN, CONF_HOST, CONF_NAME, CONF_PORT
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import section
 from homeassistant.helpers import device_registry as dr
@@ -46,6 +46,7 @@ from .const import (
     CONF_DISCOVERY_METHOD_HUBSEEK,
     CONF_DISCOVERY_METHOD_MANUAL,
     CONF_HVAC_MODES,
+    CONF_PAIRING,
     CONF_STAT_HOLD_DURATION,
     CONF_STAT_HOLD_TEMP,
     CONF_THERMOSTAT_OPTIONS,
@@ -508,21 +509,25 @@ class OptionsFlowHandler(OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Handle the flow initiated by the user."""
-        if len(self.neostat_hcs) == 0:
-            return await self.async_step_defaults(user_input=user_input)
-
         return await self.async_step_choose_options(user_input=user_input)
 
     async def async_step_choose_options(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Handle local vs cloud mode selection step."""
+
+        menu_options = {
+            CONF_DEFAULTS: "Configure default settings for devices",
+            CONF_HVAC_MODES: "Configure HVAC modes for NeoStatHC",
+            CONF_PAIRING: "Pair a new device",
+        }
+
+        if len(self.neostat_hcs) == 0:
+            del menu_options[CONF_HVAC_MODES]
+
         return self.async_show_menu(
             step_id="choose_options",
-            menu_options={
-                CONF_DEFAULTS: "Configure default settings for devices",
-                CONF_HVAC_MODES: "Configure HVAC modes for NeoStatHC",
-            },
+            menu_options=menu_options,
         )
 
     async def async_step_hvac_modes(
@@ -694,4 +699,29 @@ class OptionsFlowHandler(OptionsFlow):
 
         return self.async_show_form(
             step_id=CONF_DEFAULTS, data_schema=options_schema, errors=errors
+        )
+
+    async def async_step_pairing(
+        self, user_input: dict[str, str] | None = None
+    ) -> ConfigFlowResult:
+        """Flow to pair new device."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            _LOGGER.debug("user_input: %s", user_input)
+            _LOGGER.debug("original config: %s", self._hvac_config)
+
+            hub: NeoHub = self.config_entry.runtime_data.coordinator.hub
+            await hub.permit_join(user_input[CONF_NAME])
+
+            return self.async_abort(reason="finish_pairing")
+
+        options_schema = vol.Schema(
+            {
+                vol.Required(CONF_NAME): str,
+            }
+        )
+
+        return self.async_show_form(
+            step_id=CONF_PAIRING, data_schema=options_schema, errors=errors
         )
