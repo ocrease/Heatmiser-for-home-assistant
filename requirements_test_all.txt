@@ -1,0 +1,7 @@
+pytest
+pytest-homeassistant-custom-component  # Essential for testing custom integrations
+syrupy  # For snapshot testing
+ruff
+pylint
+pre-commit
+neohubapi==3.1
