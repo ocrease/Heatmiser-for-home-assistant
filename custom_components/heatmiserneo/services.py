@@ -464,9 +464,10 @@ SCHEMA_CREATE_TIMER_PROFILE_SEVEN = probatio.All(
 
 def _extract_config_entry_id_from_service_call(
     hass: HomeAssistant, call: ServiceCall
-) -> HeatmiserNeoConfigEntry:
+) -> tuple[HeatmiserNeoConfigEntry, str]:
     """Extract config entry id from target selector."""
     config_entry: HeatmiserNeoConfigEntry
+    requested_entity_id: str = None
     if call.data.get(ATTR_CONFIG_ENTRY_ID):
         config_entry: HeatmiserNeoConfigEntry = _validate_config_entry(
             call.hass, call.data[ATTR_CONFIG_ENTRY_ID]
@@ -510,7 +511,10 @@ def _extract_config_entry_id_from_service_call(
             translation_placeholders={"service_name": f"{DOMAIN}.{call.service}"},
             config_entry_id=config_entry.entry_id,
         )
-    return config_entry
+        requested_entity_id = (
+            next(iter(ref.referenced)) if len(ref.referenced) == 1 else None
+        )
+    return config_entry, requested_entity_id
 
 
 def _validate_config_entry(
@@ -584,9 +588,7 @@ def _validate_device_id(
 
 async def _async_set_away_mode(call: ServiceCall) -> None:
     """Set away mode on the hub."""
-    config_entry: HeatmiserNeoConfigEntry = _extract_config_entry_id_from_service_call(
-        call.hass, call
-    )
+    config_entry, _ = _extract_config_entry_id_from_service_call(call.hass, call)
 
     state = call.data[ATTR_AWAY_STATE]
 
@@ -633,9 +635,7 @@ async def _async_set_away_mode(call: ServiceCall) -> None:
 
 async def _async_rename_profile(call: ServiceCall) -> None:
     """Rename a profile."""
-    config_entry: HeatmiserNeoConfigEntry = _extract_config_entry_id_from_service_call(
-        call.hass, call
-    )
+    config_entry, _ = _extract_config_entry_id_from_service_call(call.hass, call)
 
     coordinator = config_entry.runtime_data.coordinator
     hub = config_entry.runtime_data.hub
@@ -658,9 +658,7 @@ async def _async_rename_profile(call: ServiceCall) -> None:
 
 async def _async_delete_profile(call: ServiceCall) -> None:
     """Delete a profile."""
-    config_entry: HeatmiserNeoConfigEntry = _extract_config_entry_id_from_service_call(
-        call.hass, call
-    )
+    config_entry, _ = _extract_config_entry_id_from_service_call(call.hass, call)
 
     coordinator = config_entry.runtime_data.coordinator
     hub = config_entry.runtime_data.hub
@@ -679,7 +677,7 @@ async def _async_delete_profile(call: ServiceCall) -> None:
 
 async def _async_get_profile_definitions(call: ServiceCall) -> ServiceResponse:
     """Get definitions of all profiles."""
-    config_entry: HeatmiserNeoConfigEntry = _extract_config_entry_id_from_service_call(
+    config_entry, requested_entity_id = _extract_config_entry_id_from_service_call(
         call.hass, call
     )
 
@@ -696,7 +694,12 @@ async def _async_get_profile_definitions(call: ServiceCall) -> ServiceResponse:
         for k, p in coordinator.timer_profiles.items()
     }
 
-    return {"heating_profiles": heating, "timer_profiles": timers}
+    return {
+        requested_entity_id or config_entry.entry_id: {
+            "heating_profiles": heating,
+            "timer_profiles": timers,
+        }
+    }
 
 
 async def _async_get_profile_definition(call: ServiceCall) -> ServiceResponse:
@@ -737,6 +740,9 @@ async def _async_get_profile_definition(call: ServiceCall) -> ServiceResponse:
         for entry in entity_entries
         if entry and entry.device_id and not entry.original_name
     }
+    for entry in entity_entries:
+        if entry.device_id not in main_entity_by_device:
+            main_entity_by_device[entry.device_id] = entry.entity_id
 
     return {
         main_entity_by_device.get(
@@ -755,9 +761,7 @@ async def _async_get_profile_definition(call: ServiceCall) -> ServiceResponse:
 async def _async_create_profile(
     requested_format: ScheduleFormat, timer: bool, call: ServiceCall
 ) -> None:
-    config_entry: HeatmiserNeoConfigEntry = _extract_config_entry_id_from_service_call(
-        call.hass, call
-    )
+    config_entry, _ = _extract_config_entry_id_from_service_call(call.hass, call)
 
     coordinator = config_entry.runtime_data.coordinator
     hub = config_entry.runtime_data.hub
