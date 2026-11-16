@@ -13,7 +13,15 @@ import probatio
 
 from homeassistant.components.climate import DOMAIN as CLIMATE_DOMAIN
 from homeassistant.config_entries import ConfigEntryState
-from homeassistant.const import ATTR_CONFIG_ENTRY_ID, ATTR_NAME
+from homeassistant.const import (
+    ATTR_AREA_ID,
+    ATTR_CONFIG_ENTRY_ID,
+    ATTR_DEVICE_ID,
+    ATTR_ENTITY_ID,
+    ATTR_FLOOR_ID,
+    ATTR_LABEL_ID,
+    ATTR_NAME,
+)
 from homeassistant.core import (
     HomeAssistant,
     ServiceCall,
@@ -26,6 +34,7 @@ from homeassistant.helpers import (
     config_validation as cv,
     device_registry as dr,
     entity_registry as er,
+    issue_registry as ir,
     service,
 )
 from homeassistant.helpers.device_registry import DeviceEntry
@@ -138,6 +147,19 @@ SCHEDULE_WEEKDAYS = {
     ],
 }
 
+TARGET_ID_KEYS_OR_CONFIG_ENTRY = (*cv.TARGET_ID_KEYS, ATTR_CONFIG_ENTRY_ID)
+_HAS_TARGET_ID_KEYS_OR_CONFIG_ENTRY = probatio.AtLeastOne(
+    *TARGET_ID_KEYS_OR_CONFIG_ENTRY
+)
+_TARGET_KEY_DEPRECATIONS = (
+    cv.deprecated(ATTR_ENTITY_ID),
+    cv.deprecated(ATTR_FLOOR_ID),
+    cv.deprecated(ATTR_AREA_ID),
+    cv.deprecated(ATTR_LABEL_ID),
+    cv.deprecated(ATTR_DEVICE_ID),
+)
+
+
 ensure_list = probatio.EnsureList()
 
 
@@ -177,45 +199,63 @@ def time_str(value: Any) -> str:
 
 
 SCHEMA_SET_AWAY_MODE = probatio.All(
+    *_TARGET_KEY_DEPRECATIONS,
     probatio.Schema(
         {
-            probatio.Required(ATTR_CONFIG_ENTRY_ID): ConfigEntrySelector(
+            probatio.Optional(ATTR_CONFIG_ENTRY_ID): ConfigEntrySelector(
                 {"integration": DOMAIN}
             ),
             probatio.Required(ATTR_AWAY_STATE, default=False): cv.boolean,
             # probatio.Optional(ATTR_AWAY_START): cv.datetime,
             probatio.Optional(ATTR_AWAY_END): cv.datetime,
+            **cv.ENTITY_SERVICE_FIELDS,
         }
     ),
     _dates_only_provided_when_setting_away(ATTR_AWAY_STATE, ATTR_AWAY_END),
+    _HAS_TARGET_ID_KEYS_OR_CONFIG_ENTRY,
 )
 
-SCHEMA_RENAME_PROFILE = probatio.Schema(
-    {
-        probatio.Required(ATTR_CONFIG_ENTRY_ID): ConfigEntrySelector(
-            {"integration": DOMAIN}
-        ),
-        probatio.Required(ATTR_NAME_OLD): cv.string,
-        probatio.Required(ATTR_NAME_NEW): cv.string,
-    }
+SCHEMA_RENAME_PROFILE = probatio.All(
+    *_TARGET_KEY_DEPRECATIONS,
+    probatio.Schema(
+        {
+            probatio.Optional(ATTR_CONFIG_ENTRY_ID): ConfigEntrySelector(
+                {"integration": DOMAIN}
+            ),
+            probatio.Required(ATTR_NAME_OLD): cv.string,
+            probatio.Required(ATTR_NAME_NEW): cv.string,
+            **cv.ENTITY_SERVICE_FIELDS,
+        },
+    ),
+    _HAS_TARGET_ID_KEYS_OR_CONFIG_ENTRY,
 )
 
-SCHEMA_DELETE_PROFILE = probatio.Schema(
-    {
-        probatio.Required(ATTR_CONFIG_ENTRY_ID): ConfigEntrySelector(
-            {"integration": DOMAIN}
-        ),
-        probatio.Required(ATTR_NAME): cv.string,
-    }
+SCHEMA_DELETE_PROFILE = probatio.All(
+    *_TARGET_KEY_DEPRECATIONS,
+    probatio.Schema(
+        {
+            probatio.Optional(ATTR_CONFIG_ENTRY_ID): ConfigEntrySelector(
+                {"integration": DOMAIN}
+            ),
+            probatio.Required(ATTR_NAME): cv.string,
+            **cv.ENTITY_SERVICE_FIELDS,
+        }
+    ),
+    _HAS_TARGET_ID_KEYS_OR_CONFIG_ENTRY,
 )
 
-SCHEMA_GET_PROFILE_DEFINITIONS = probatio.Schema(
-    {
-        probatio.Required(ATTR_CONFIG_ENTRY_ID): ConfigEntrySelector(
-            {"integration": DOMAIN}
-        ),
-        probatio.Optional(ATTR_FRIENDLY_MODE, default=False): cv.boolean,
-    }
+SCHEMA_GET_PROFILE_DEFINITIONS = probatio.All(
+    *_TARGET_KEY_DEPRECATIONS,
+    probatio.Schema(
+        {
+            probatio.Optional(ATTR_CONFIG_ENTRY_ID): ConfigEntrySelector(
+                {"integration": DOMAIN}
+            ),
+            probatio.Optional(ATTR_FRIENDLY_MODE, default=False): cv.boolean,
+            **cv.ENTITY_SERVICE_FIELDS,
+        }
+    ),
+    _HAS_TARGET_ID_KEYS_OR_CONFIG_ENTRY,
 )
 
 SCHEMA_GET_DEVICE_PROFILE_DEFINITION = cv.make_entity_service_schema(
@@ -243,124 +283,234 @@ SCHEMA_HOLD_OFF = cv.make_entity_service_schema({})
 
 
 PARTIAL_SCHEMA_PROFILE_CREATE = {
-    probatio.Required(ATTR_CONFIG_ENTRY_ID): ConfigEntrySelector(
+    probatio.Optional(ATTR_CONFIG_ENTRY_ID): ConfigEntrySelector(
         {"integration": DOMAIN}
     ),
     probatio.Required(ATTR_NAME): cv.string,
     probatio.Optional(ATTR_CREATE_MODE, default=OPTION_CREATE_MODE_CREATE): probatio.In(
         OPTIONS_CREATE_MODE
     ),
+    **cv.ENTITY_SERVICE_FIELDS,
 }
 
-SCHEMA_CREATE_PROFILE_ONE = probatio.Schema(
-    {
-        **PARTIAL_SCHEMA_PROFILE_CREATE,
-        probatio.Required(ATTR_SUNDAY_TIMES): probatio.All(ensure_list, [time_str]),
-        probatio.Required(ATTR_SUNDAY_TEMPERATURES): probatio.All(
-            ensure_list, [probatio.Coerce(float)]
-        ),
-    }
+SCHEMA_CREATE_PROFILE_ONE = probatio.All(
+    *_TARGET_KEY_DEPRECATIONS,
+    probatio.Schema(
+        {
+            **PARTIAL_SCHEMA_PROFILE_CREATE,
+            probatio.Required(ATTR_SUNDAY_TIMES): probatio.All(ensure_list, [time_str]),
+            probatio.Required(ATTR_SUNDAY_TEMPERATURES): probatio.All(
+                ensure_list, [probatio.Coerce(float)]
+            ),
+        }
+    ),
+    _HAS_TARGET_ID_KEYS_OR_CONFIG_ENTRY,
 )
 
-SCHEMA_CREATE_PROFILE_TWO = probatio.Schema(
-    {
-        **PARTIAL_SCHEMA_PROFILE_CREATE,
-        probatio.Required(ATTR_MONDAY_TIMES): probatio.All(ensure_list, [time_str]),
-        probatio.Required(ATTR_MONDAY_TEMPERATURES): probatio.All(
-            ensure_list, [probatio.Coerce(float)]
-        ),
-        probatio.Required(ATTR_SUNDAY_TIMES): probatio.All(ensure_list, [time_str]),
-        probatio.Required(ATTR_SUNDAY_TEMPERATURES): probatio.All(
-            ensure_list, [probatio.Coerce(float)]
-        ),
-    }
+SCHEMA_CREATE_PROFILE_TWO = probatio.All(
+    *_TARGET_KEY_DEPRECATIONS,
+    probatio.Schema(
+        {
+            **PARTIAL_SCHEMA_PROFILE_CREATE,
+            probatio.Required(ATTR_MONDAY_TIMES): probatio.All(ensure_list, [time_str]),
+            probatio.Required(ATTR_MONDAY_TEMPERATURES): probatio.All(
+                ensure_list, [probatio.Coerce(float)]
+            ),
+            probatio.Required(ATTR_SUNDAY_TIMES): probatio.All(ensure_list, [time_str]),
+            probatio.Required(ATTR_SUNDAY_TEMPERATURES): probatio.All(
+                ensure_list, [probatio.Coerce(float)]
+            ),
+        }
+    ),
+    _HAS_TARGET_ID_KEYS_OR_CONFIG_ENTRY,
 )
 
-SCHEMA_CREATE_PROFILE_SEVEN = probatio.Schema(
-    {
-        **PARTIAL_SCHEMA_PROFILE_CREATE,
-        probatio.Required(ATTR_MONDAY_TIMES): probatio.All(ensure_list, [time_str]),
-        probatio.Required(ATTR_MONDAY_TEMPERATURES): probatio.All(
-            ensure_list, [probatio.Coerce(float)]
-        ),
-        probatio.Required(ATTR_TUESDAY_TIMES): probatio.All(ensure_list, [time_str]),
-        probatio.Required(ATTR_TUESDAY_TEMPERATURES): probatio.All(
-            ensure_list, [probatio.Coerce(float)]
-        ),
-        probatio.Required(ATTR_WEDNESDAY_TIMES): probatio.All(ensure_list, [time_str]),
-        probatio.Required(ATTR_WEDNESDAY_TEMPERATURES): probatio.All(
-            ensure_list, [probatio.Coerce(float)]
-        ),
-        probatio.Required(ATTR_THURSDAY_TIMES): probatio.All(ensure_list, [time_str]),
-        probatio.Required(ATTR_THURSDAY_TEMPERATURES): probatio.All(
-            ensure_list, [probatio.Coerce(float)]
-        ),
-        probatio.Required(ATTR_FRIDAY_TIMES): probatio.All(ensure_list, [time_str]),
-        probatio.Required(ATTR_FRIDAY_TEMPERATURES): probatio.All(
-            ensure_list, [probatio.Coerce(float)]
-        ),
-        probatio.Required(ATTR_SATURDAY_TIMES): probatio.All(ensure_list, [time_str]),
-        probatio.Required(ATTR_SATURDAY_TEMPERATURES): probatio.All(
-            ensure_list, [probatio.Coerce(float)]
-        ),
-        probatio.Required(ATTR_SUNDAY_TIMES): probatio.All(ensure_list, [time_str]),
-        probatio.Required(ATTR_SUNDAY_TEMPERATURES): probatio.All(
-            ensure_list, [probatio.Coerce(float)]
-        ),
-    }
+SCHEMA_CREATE_PROFILE_SEVEN = probatio.All(
+    *_TARGET_KEY_DEPRECATIONS,
+    probatio.Schema(
+        {
+            **PARTIAL_SCHEMA_PROFILE_CREATE,
+            probatio.Required(ATTR_MONDAY_TIMES): probatio.All(ensure_list, [time_str]),
+            probatio.Required(ATTR_MONDAY_TEMPERATURES): probatio.All(
+                ensure_list, [probatio.Coerce(float)]
+            ),
+            probatio.Required(ATTR_TUESDAY_TIMES): probatio.All(
+                ensure_list, [time_str]
+            ),
+            probatio.Required(ATTR_TUESDAY_TEMPERATURES): probatio.All(
+                ensure_list, [probatio.Coerce(float)]
+            ),
+            probatio.Required(ATTR_WEDNESDAY_TIMES): probatio.All(
+                ensure_list, [time_str]
+            ),
+            probatio.Required(ATTR_WEDNESDAY_TEMPERATURES): probatio.All(
+                ensure_list, [probatio.Coerce(float)]
+            ),
+            probatio.Required(ATTR_THURSDAY_TIMES): probatio.All(
+                ensure_list, [time_str]
+            ),
+            probatio.Required(ATTR_THURSDAY_TEMPERATURES): probatio.All(
+                ensure_list, [probatio.Coerce(float)]
+            ),
+            probatio.Required(ATTR_FRIDAY_TIMES): probatio.All(ensure_list, [time_str]),
+            probatio.Required(ATTR_FRIDAY_TEMPERATURES): probatio.All(
+                ensure_list, [probatio.Coerce(float)]
+            ),
+            probatio.Required(ATTR_SATURDAY_TIMES): probatio.All(
+                ensure_list, [time_str]
+            ),
+            probatio.Required(ATTR_SATURDAY_TEMPERATURES): probatio.All(
+                ensure_list, [probatio.Coerce(float)]
+            ),
+            probatio.Required(ATTR_SUNDAY_TIMES): probatio.All(ensure_list, [time_str]),
+            probatio.Required(ATTR_SUNDAY_TEMPERATURES): probatio.All(
+                ensure_list, [probatio.Coerce(float)]
+            ),
+        }
+    ),
+    _HAS_TARGET_ID_KEYS_OR_CONFIG_ENTRY,
 )
 
-SCHEMA_CREATE_TIMER_PROFILE_ONE = probatio.Schema(
-    {
-        **PARTIAL_SCHEMA_PROFILE_CREATE,
-        probatio.Required(ATTR_SUNDAY_ON_TIMES): probatio.All(ensure_list, [time_str]),
-        probatio.Required(ATTR_SUNDAY_OFF_TIMES): probatio.All(ensure_list, [time_str]),
-    }
+SCHEMA_CREATE_TIMER_PROFILE_ONE = probatio.All(
+    *_TARGET_KEY_DEPRECATIONS,
+    probatio.Schema(
+        {
+            **PARTIAL_SCHEMA_PROFILE_CREATE,
+            probatio.Required(ATTR_SUNDAY_ON_TIMES): probatio.All(
+                ensure_list, [time_str]
+            ),
+            probatio.Required(ATTR_SUNDAY_OFF_TIMES): probatio.All(
+                ensure_list, [time_str]
+            ),
+        }
+    ),
+    _HAS_TARGET_ID_KEYS_OR_CONFIG_ENTRY,
 )
 
-SCHEMA_CREATE_TIMER_PROFILE_TWO = probatio.Schema(
-    {
-        **PARTIAL_SCHEMA_PROFILE_CREATE,
-        probatio.Required(ATTR_MONDAY_ON_TIMES): probatio.All(ensure_list, [time_str]),
-        probatio.Required(ATTR_MONDAY_OFF_TIMES): probatio.All(ensure_list, [time_str]),
-        probatio.Required(ATTR_SUNDAY_ON_TIMES): probatio.All(ensure_list, [time_str]),
-        probatio.Required(ATTR_SUNDAY_OFF_TIMES): probatio.All(ensure_list, [time_str]),
-    }
+SCHEMA_CREATE_TIMER_PROFILE_TWO = probatio.All(
+    *_TARGET_KEY_DEPRECATIONS,
+    probatio.Schema(
+        {
+            **PARTIAL_SCHEMA_PROFILE_CREATE,
+            probatio.Required(ATTR_MONDAY_ON_TIMES): probatio.All(
+                ensure_list, [time_str]
+            ),
+            probatio.Required(ATTR_MONDAY_OFF_TIMES): probatio.All(
+                ensure_list, [time_str]
+            ),
+            probatio.Required(ATTR_SUNDAY_ON_TIMES): probatio.All(
+                ensure_list, [time_str]
+            ),
+            probatio.Required(ATTR_SUNDAY_OFF_TIMES): probatio.All(
+                ensure_list, [time_str]
+            ),
+        }
+    ),
+    _HAS_TARGET_ID_KEYS_OR_CONFIG_ENTRY,
 )
 
-SCHEMA_CREATE_TIMER_PROFILE_SEVEN = probatio.Schema(
-    {
-        **PARTIAL_SCHEMA_PROFILE_CREATE,
-        probatio.Required(ATTR_MONDAY_ON_TIMES): probatio.All(ensure_list, [time_str]),
-        probatio.Required(ATTR_MONDAY_OFF_TIMES): probatio.All(ensure_list, [time_str]),
-        probatio.Required(ATTR_TUESDAY_ON_TIMES): probatio.All(ensure_list, [time_str]),
-        probatio.Required(ATTR_TUESDAY_OFF_TIMES): probatio.All(
-            ensure_list, [time_str]
-        ),
-        probatio.Required(ATTR_WEDNESDAY_ON_TIMES): probatio.All(
-            ensure_list, [time_str]
-        ),
-        probatio.Required(ATTR_WEDNESDAY_OFF_TIMES): probatio.All(
-            ensure_list, [time_str]
-        ),
-        probatio.Required(ATTR_THURSDAY_ON_TIMES): probatio.All(
-            ensure_list, [time_str]
-        ),
-        probatio.Required(ATTR_THURSDAY_OFF_TIMES): probatio.All(
-            ensure_list, [time_str]
-        ),
-        probatio.Required(ATTR_FRIDAY_ON_TIMES): probatio.All(ensure_list, [time_str]),
-        probatio.Required(ATTR_FRIDAY_OFF_TIMES): probatio.All(ensure_list, [time_str]),
-        probatio.Required(ATTR_SATURDAY_ON_TIMES): probatio.All(
-            ensure_list, [time_str]
-        ),
-        probatio.Required(ATTR_SATURDAY_OFF_TIMES): probatio.All(
-            ensure_list, [time_str]
-        ),
-        probatio.Required(ATTR_SUNDAY_ON_TIMES): probatio.All(ensure_list, [time_str]),
-        probatio.Required(ATTR_SUNDAY_OFF_TIMES): probatio.All(ensure_list, [time_str]),
-    }
+SCHEMA_CREATE_TIMER_PROFILE_SEVEN = probatio.All(
+    *_TARGET_KEY_DEPRECATIONS,
+    probatio.Schema(
+        {
+            **PARTIAL_SCHEMA_PROFILE_CREATE,
+            probatio.Required(ATTR_MONDAY_ON_TIMES): probatio.All(
+                ensure_list, [time_str]
+            ),
+            probatio.Required(ATTR_MONDAY_OFF_TIMES): probatio.All(
+                ensure_list, [time_str]
+            ),
+            probatio.Required(ATTR_TUESDAY_ON_TIMES): probatio.All(
+                ensure_list, [time_str]
+            ),
+            probatio.Required(ATTR_TUESDAY_OFF_TIMES): probatio.All(
+                ensure_list, [time_str]
+            ),
+            probatio.Required(ATTR_WEDNESDAY_ON_TIMES): probatio.All(
+                ensure_list, [time_str]
+            ),
+            probatio.Required(ATTR_WEDNESDAY_OFF_TIMES): probatio.All(
+                ensure_list, [time_str]
+            ),
+            probatio.Required(ATTR_THURSDAY_ON_TIMES): probatio.All(
+                ensure_list, [time_str]
+            ),
+            probatio.Required(ATTR_THURSDAY_OFF_TIMES): probatio.All(
+                ensure_list, [time_str]
+            ),
+            probatio.Required(ATTR_FRIDAY_ON_TIMES): probatio.All(
+                ensure_list, [time_str]
+            ),
+            probatio.Required(ATTR_FRIDAY_OFF_TIMES): probatio.All(
+                ensure_list, [time_str]
+            ),
+            probatio.Required(ATTR_SATURDAY_ON_TIMES): probatio.All(
+                ensure_list, [time_str]
+            ),
+            probatio.Required(ATTR_SATURDAY_OFF_TIMES): probatio.All(
+                ensure_list, [time_str]
+            ),
+            probatio.Required(ATTR_SUNDAY_ON_TIMES): probatio.All(
+                ensure_list, [time_str]
+            ),
+            probatio.Required(ATTR_SUNDAY_OFF_TIMES): probatio.All(
+                ensure_list, [time_str]
+            ),
+        }
+    ),
+    _HAS_TARGET_ID_KEYS_OR_CONFIG_ENTRY,
 )
+
+
+def _extract_config_entry_id_from_service_call(
+    hass: HomeAssistant, call: ServiceCall
+) -> HeatmiserNeoConfigEntry:
+    """Extract config entry id from target selector."""
+    config_entry: HeatmiserNeoConfigEntry
+    if call.data.get(ATTR_CONFIG_ENTRY_ID):
+        config_entry: HeatmiserNeoConfigEntry = _validate_config_entry(
+            call.hass, call.data[ATTR_CONFIG_ENTRY_ID]
+        )
+    else:
+        ref = async_extract_referenced_entity_ids(call.hass, TargetSelection(call.data))
+        entity_registry = er.async_get(call.hass)
+        entity_entries = [
+            entity_registry.async_get(entity_id)
+            for entity_id in ref.referenced | ref.indirectly_referenced
+        ]
+
+        config_entries = {
+            entry.config_entry_id
+            for entry in entity_entries
+            if entry and entry.config_entry_id and entry.platform == DOMAIN
+        }
+
+        if len(config_entries) == 0:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="config_entry_not_found_from_target_selector",
+            )
+        if len(config_entries) > 1:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="no_unique_config_entry_found_from_target_selector",
+            )
+        config_entry: HeatmiserNeoConfigEntry = _validate_config_entry(
+            call.hass, config_entries.pop()
+        )
+
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            f"deprecated_target_selector_service_{call.service}",
+            breaks_in_ha_version="2027.6.0",
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="deprecated_target_selector",
+            translation_placeholders={"service_name": f"{DOMAIN}.{call.service}"},
+            config_entry_id=config_entry.entry_id,
+        )
+    return config_entry
 
 
 def _validate_config_entry(
@@ -434,9 +584,10 @@ def _validate_device_id(
 
 async def _async_set_away_mode(call: ServiceCall) -> None:
     """Set away mode on the hub."""
-    config_entry: HeatmiserNeoConfigEntry = _validate_config_entry(
-        call.hass, call.data[ATTR_CONFIG_ENTRY_ID]
+    config_entry: HeatmiserNeoConfigEntry = _extract_config_entry_id_from_service_call(
+        call.hass, call
     )
+
     state = call.data[ATTR_AWAY_STATE]
 
     coordinator = config_entry.runtime_data.coordinator
@@ -482,8 +633,8 @@ async def _async_set_away_mode(call: ServiceCall) -> None:
 
 async def _async_rename_profile(call: ServiceCall) -> None:
     """Rename a profile."""
-    config_entry: HeatmiserNeoConfigEntry = _validate_config_entry(
-        call.hass, call.data[ATTR_CONFIG_ENTRY_ID]
+    config_entry: HeatmiserNeoConfigEntry = _extract_config_entry_id_from_service_call(
+        call.hass, call
     )
 
     coordinator = config_entry.runtime_data.coordinator
@@ -507,8 +658,8 @@ async def _async_rename_profile(call: ServiceCall) -> None:
 
 async def _async_delete_profile(call: ServiceCall) -> None:
     """Delete a profile."""
-    config_entry: HeatmiserNeoConfigEntry = _validate_config_entry(
-        call.hass, call.data[ATTR_CONFIG_ENTRY_ID]
+    config_entry: HeatmiserNeoConfigEntry = _extract_config_entry_id_from_service_call(
+        call.hass, call
     )
 
     coordinator = config_entry.runtime_data.coordinator
@@ -528,8 +679,8 @@ async def _async_delete_profile(call: ServiceCall) -> None:
 
 async def _async_get_profile_definitions(call: ServiceCall) -> ServiceResponse:
     """Get definitions of all profiles."""
-    config_entry: HeatmiserNeoConfigEntry = _validate_config_entry(
-        call.hass, call.data[ATTR_CONFIG_ENTRY_ID]
+    config_entry: HeatmiserNeoConfigEntry = _extract_config_entry_id_from_service_call(
+        call.hass, call
     )
 
     coordinator = config_entry.runtime_data.coordinator
@@ -604,8 +755,8 @@ async def _async_get_profile_definition(call: ServiceCall) -> ServiceResponse:
 async def _async_create_profile(
     requested_format: ScheduleFormat, timer: bool, call: ServiceCall
 ) -> None:
-    config_entry: HeatmiserNeoConfigEntry = _validate_config_entry(
-        call.hass, call.data[ATTR_CONFIG_ENTRY_ID]
+    config_entry: HeatmiserNeoConfigEntry = _extract_config_entry_id_from_service_call(
+        call.hass, call
     )
 
     coordinator = config_entry.runtime_data.coordinator

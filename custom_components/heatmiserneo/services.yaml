@@ -70,16 +70,16 @@ timer_hold_on:
             - integration: heatmiserneo
               model: NeoStat Touch
               model_id: 23-TIMER
-    entity_id:
-      name: Entity
-      description: Select the entity to target
-      required: false
-      selector:
-        entity:
-          multiple: true
-          filter:
-            - integration: heatmiserneo
-              domain: select
+    # entity_id:
+    #   name: Entity
+    #   description: Select the entity to target
+    #   required: false
+    #   selector:
+    #     entity:
+    #       multiple: true
+    #       filter:
+    #         - integration: heatmiserneo
+    #           domain: select
     area_id:
       name: Area
       description: Select the area to target
@@ -88,6 +88,21 @@ timer_hold_on:
         area:
           multiple: true
           device: *timer_device_models
+    floor_id:
+      name: Floor
+      description: Select the floor to target
+      required: false
+      selector:
+        floor:
+          multiple: true
+          device: *timer_device_models
+    label_id:
+      name: Label
+      description: Select the label to target
+      required: false
+      selector:
+        label:
+          multiple: true
     hold_duration: *hold_duration
     hold_state:
       name: Hold State
@@ -102,7 +117,7 @@ set_away_mode:
     config_entry_id: &config_entry
       name: Hub
       description: Select the NeoHub to target
-      required: true
+      required: false
       selector:
         config_entry:
           integration: heatmiserneo
@@ -155,18 +170,18 @@ get_device_profile_definition:
               model: NeoStat Pro
             - integration: heatmiserneo
               model: NeoStat Touch
-    entity_id:
-      name: Entity
-      description: Select the entity to target
-      required: false
-      selector:
-        entity:
-          multiple: true
-          filter:
-            - integration: heatmiserneo
-              domain:
-                - select
-                - climate
+    # entity_id:
+    #   name: Entity
+    #   description: Select the entity to target
+    #   required: false
+    #   selector:
+    #     entity:
+    #       multiple: true
+    #       filter:
+    #         - integration: heatmiserneo
+    #           domain:
+    #             - select
+    #             - climate
     area_id:
       name: Area
       description: Select the area to target
@@ -175,6 +190,21 @@ get_device_profile_definition:
         area:
           multiple: true
           device: *profile_devices
+    floor_id:
+      name: Floor
+      description: Select the floor to target
+      required: false
+      selector:
+        floor:
+          multiple: true
+          device: *profile_devices
+    label_id:
+      name: Label
+      description: Select the label to target
+      required: false
+      selector:
+        label:
+          multiple: true
     friendly_mode: &friendly_mode
       name: Friendly Mode
       description: Enable to return the profile in a format easier to consume by humans
