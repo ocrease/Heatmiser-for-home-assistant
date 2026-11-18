@@ -274,7 +274,7 @@
       "name": "Set Away Mode",
       "description": "Sets the hub to away or holiday",
       "fields": {
-        "config_entry_id": {
+        "device_id": {
           "name": "[%key:component::heatmiserneo::common::config_entry_name%]",
           "description": "[%key:component::heatmiserneo::common::config_entry_description%]"
         },
@@ -292,7 +292,7 @@
       "name": "Create Profile - 5 Day / 2 Day",
       "description": "Creates or update a profile for weekdays and weekends",
       "fields": {
-        "config_entry_id": {
+        "device_id": {
           "description": "[%key:component::heatmiserneo::common::config_entry_description%]",
           "name": "[%key:component::heatmiserneo::common::config_entry_name%]"
         }
@@ -310,7 +310,7 @@
       "name": "Create Profile - 7 Day",
       "description": "Creates or update a profile for each day of the week",
       "fields": {
-        "config_entry_id": {
+        "device_id": {
           "description": "[%key:component::heatmiserneo::common::config_entry_description%]",
           "name": "[%key:component::heatmiserneo::common::config_entry_name%]"
         }
@@ -343,7 +343,7 @@
       "name": "Create Timer Profile - 5 Day / 2 Day",
       "description": "Creates or update a timer profile for weekdays and weekends",
       "fields": {
-        "config_entry_id": {
+        "device_id": {
           "description": "[%key:component::heatmiserneo::common::config_entry_description%]",
           "name": "[%key:component::heatmiserneo::common::config_entry_name%]"
         }
@@ -361,7 +361,7 @@
       "name": "Create Timer Profile - 7 Day",
       "description": "Creates or update a timer profile for each day of the week",
       "fields": {
-        "config_entry_id": {
+        "device_id": {
           "description": "[%key:component::heatmiserneo::common::config_entry_description%]",
           "name": "[%key:component::heatmiserneo::common::config_entry_name%]"
         }
@@ -442,10 +442,7 @@
       "message": "No suitable devices found for supplied entity_id, device_id, floor_id, area_id or label_id"
     },
     "config_entry_not_found_from_target_selector": {
-      "message": "Config entry not found for supplied entity_id, device_id, floor_id, area_id or label_id"
-    },
-    "no_unique_config_entry_found_from_target_selector": {
-      "message": "No unique config entry found for supplied entity_id, device_id, floor_id, area_id or label_id"
+      "message": "Hub not found for supplied entity_id, device_id, floor_id, area_id or label_id"
     }
   }
 }

@@ -274,7 +274,7 @@
       "name": "Set Away Mode",
       "description": "Sets the hub to away or holiday",
       "fields": {
-        "config_entry_id": {
+        "device_id": {
           "name": "Hub",
           "description": "Select the NeoHub to target"
         },
@@ -291,6 +291,12 @@
     "create_profile_two": {
       "name": "Create Profile - 5 Day / 2 Day",
       "description": "Creates or update a profile for weekdays and weekends",
+      "fields": {
+        "device_id": {
+          "name": "Hub",
+          "description": "Select the NeoHub to target"
+        }
+      },
       "sections": {
         "monday_levels": {
           "name": "Weekday Levels"
@@ -303,6 +309,12 @@
     "create_profile_seven": {
       "name": "Create Profile - 7 Day",
       "description": "Creates or update a profile for each day of the week",
+      "fields": {
+        "device_id": {
+          "name": "Hub",
+          "description": "Select the NeoHub to target"
+        }
+      },
       "sections": {
         "monday_levels": {
           "name": "Monday Levels"
@@ -330,6 +342,12 @@
     "create_timer_profile_two": {
       "name": "Create Timer Profile - 5 Day / 2 Day",
       "description": "Creates or update a timer profile for weekdays and weekends",
+      "fields": {
+        "device_id": {
+          "name": "Hub",
+          "description": "Select the NeoHub to target"
+        }
+      },
       "sections": {
         "monday_levels": {
           "name": "Weekday Levels"
@@ -342,6 +360,12 @@
     "create_timer_profile_seven": {
       "name": "Create Timer Profile - 7 Day",
       "description": "Creates or update a timer profile for each day of the week",
+      "fields": {
+        "device_id": {
+          "name": "Hub",
+          "description": "Select the NeoHub to target"
+        }
+      },
       "sections": {
         "monday_levels": {
           "name": "Monday Levels"
@@ -418,10 +442,7 @@
       "message": "No suitable devices found for supplied entity_id, device_id or area_id"
     },
     "config_entry_not_found_from_target_selector": {
-      "message": "Config entry not found for supplied entity_id, device_id, floor_id, area_id or label_id"
-    },
-    "no_unique_config_entry_found_from_target_selector": {
-      "message": "No unique config entry found for supplied entity_id, device_id, floor_id, area_id or label_id"
+      "message": "Hub not found for supplied entity_id, device_id, floor_id, area_id or label_id"
     }
   }
 }

@@ -13,15 +13,7 @@ import probatio
 
 from homeassistant.components.climate import DOMAIN as CLIMATE_DOMAIN
 from homeassistant.config_entries import ConfigEntryState
-from homeassistant.const import (
-    ATTR_AREA_ID,
-    ATTR_CONFIG_ENTRY_ID,
-    ATTR_DEVICE_ID,
-    ATTR_ENTITY_ID,
-    ATTR_FLOOR_ID,
-    ATTR_LABEL_ID,
-    ATTR_NAME,
-)
+from homeassistant.const import ATTR_NAME
 from homeassistant.core import (
     HomeAssistant,
     ServiceCall,
@@ -34,17 +26,14 @@ from homeassistant.helpers import (
     config_validation as cv,
     device_registry as dr,
     entity_registry as er,
-    issue_registry as ir,
     service,
 )
 from homeassistant.helpers.device_registry import DeviceEntry
-from homeassistant.helpers.selector import ConfigEntrySelector
 from homeassistant.helpers.target import (
     TargetSelection,
     async_extract_referenced_entity_ids,
 )
 import homeassistant.util.dt as dt_util
-from homeassistant.util.json import JsonValueType
 
 from .const import (
     ATTR_AWAY_END,
@@ -147,18 +136,6 @@ SCHEDULE_WEEKDAYS = {
     ],
 }
 
-TARGET_ID_KEYS_OR_CONFIG_ENTRY = (*cv.TARGET_ID_KEYS, ATTR_CONFIG_ENTRY_ID)
-_HAS_TARGET_ID_KEYS_OR_CONFIG_ENTRY = probatio.AtLeastOne(
-    *TARGET_ID_KEYS_OR_CONFIG_ENTRY
-)
-_TARGET_KEY_DEPRECATIONS = (
-    cv.deprecated(ATTR_ENTITY_ID),
-    cv.deprecated(ATTR_FLOOR_ID),
-    cv.deprecated(ATTR_AREA_ID),
-    cv.deprecated(ATTR_LABEL_ID),
-    cv.deprecated(ATTR_DEVICE_ID),
-)
-
 
 ensure_list = probatio.EnsureList()
 
@@ -198,64 +175,36 @@ def time_str(value: Any) -> str:
     return time_val.strftime("%H:%M")
 
 
-SCHEMA_SET_AWAY_MODE = probatio.All(
-    *_TARGET_KEY_DEPRECATIONS,
-    probatio.Schema(
-        {
-            probatio.Optional(ATTR_CONFIG_ENTRY_ID): ConfigEntrySelector(
-                {"integration": DOMAIN}
-            ),
-            probatio.Required(ATTR_AWAY_STATE, default=False): cv.boolean,
-            # probatio.Optional(ATTR_AWAY_START): cv.datetime,
-            probatio.Optional(ATTR_AWAY_END): cv.datetime,
-            **cv.ENTITY_SERVICE_FIELDS,
-        }
-    ),
-    _dates_only_provided_when_setting_away(ATTR_AWAY_STATE, ATTR_AWAY_END),
-    _HAS_TARGET_ID_KEYS_OR_CONFIG_ENTRY,
+SCHEMA_SET_AWAY_MODE = probatio.Schema(
+    probatio.All(
+        cv.make_entity_service_schema(
+            {
+                probatio.Required(ATTR_AWAY_STATE, default=False): cv.boolean,
+                # probatio.Optional(ATTR_AWAY_START): cv.datetime,
+                probatio.Optional(ATTR_AWAY_END): cv.datetime,
+            }
+        ),
+        _dates_only_provided_when_setting_away(ATTR_AWAY_STATE, ATTR_AWAY_END),
+    )
 )
 
-SCHEMA_RENAME_PROFILE = probatio.All(
-    *_TARGET_KEY_DEPRECATIONS,
-    probatio.Schema(
-        {
-            probatio.Optional(ATTR_CONFIG_ENTRY_ID): ConfigEntrySelector(
-                {"integration": DOMAIN}
-            ),
-            probatio.Required(ATTR_NAME_OLD): cv.string,
-            probatio.Required(ATTR_NAME_NEW): cv.string,
-            **cv.ENTITY_SERVICE_FIELDS,
-        },
-    ),
-    _HAS_TARGET_ID_KEYS_OR_CONFIG_ENTRY,
+SCHEMA_RENAME_PROFILE = cv.make_entity_service_schema(
+    {
+        probatio.Required(ATTR_NAME_OLD): cv.string,
+        probatio.Required(ATTR_NAME_NEW): cv.string,
+    },
 )
 
-SCHEMA_DELETE_PROFILE = probatio.All(
-    *_TARGET_KEY_DEPRECATIONS,
-    probatio.Schema(
-        {
-            probatio.Optional(ATTR_CONFIG_ENTRY_ID): ConfigEntrySelector(
-                {"integration": DOMAIN}
-            ),
-            probatio.Required(ATTR_NAME): cv.string,
-            **cv.ENTITY_SERVICE_FIELDS,
-        }
-    ),
-    _HAS_TARGET_ID_KEYS_OR_CONFIG_ENTRY,
+SCHEMA_DELETE_PROFILE = cv.make_entity_service_schema(
+    {
+        probatio.Required(ATTR_NAME): cv.string,
+    }
 )
 
-SCHEMA_GET_PROFILE_DEFINITIONS = probatio.All(
-    *_TARGET_KEY_DEPRECATIONS,
-    probatio.Schema(
-        {
-            probatio.Optional(ATTR_CONFIG_ENTRY_ID): ConfigEntrySelector(
-                {"integration": DOMAIN}
-            ),
-            probatio.Optional(ATTR_FRIENDLY_MODE, default=False): cv.boolean,
-            **cv.ENTITY_SERVICE_FIELDS,
-        }
-    ),
-    _HAS_TARGET_ID_KEYS_OR_CONFIG_ENTRY,
+SCHEMA_GET_PROFILE_DEFINITIONS = cv.make_entity_service_schema(
+    {
+        probatio.Optional(ATTR_FRIENDLY_MODE, default=False): cv.boolean,
+    }
 )
 
 SCHEMA_GET_DEVICE_PROFILE_DEFINITION = cv.make_entity_service_schema(
@@ -281,240 +230,184 @@ SCHEMA_HOLD_ON = cv.make_entity_service_schema(
 )
 SCHEMA_HOLD_OFF = cv.make_entity_service_schema({})
 
-
 PARTIAL_SCHEMA_PROFILE_CREATE = {
-    probatio.Optional(ATTR_CONFIG_ENTRY_ID): ConfigEntrySelector(
-        {"integration": DOMAIN}
-    ),
     probatio.Required(ATTR_NAME): cv.string,
     probatio.Optional(ATTR_CREATE_MODE, default=OPTION_CREATE_MODE_CREATE): probatio.In(
         OPTIONS_CREATE_MODE
     ),
-    **cv.ENTITY_SERVICE_FIELDS,
 }
 
-SCHEMA_CREATE_PROFILE_ONE = probatio.All(
-    *_TARGET_KEY_DEPRECATIONS,
-    probatio.Schema(
-        {
-            **PARTIAL_SCHEMA_PROFILE_CREATE,
-            probatio.Required(ATTR_SUNDAY_TIMES): probatio.All(ensure_list, [time_str]),
-            probatio.Required(ATTR_SUNDAY_TEMPERATURES): probatio.All(
-                ensure_list, [probatio.Coerce(float)]
-            ),
-        }
-    ),
-    _HAS_TARGET_ID_KEYS_OR_CONFIG_ENTRY,
+SCHEMA_CREATE_PROFILE_ONE = cv.make_entity_service_schema(
+    {
+        **PARTIAL_SCHEMA_PROFILE_CREATE,
+        probatio.Required(ATTR_SUNDAY_TIMES): probatio.All(ensure_list, [time_str]),
+        probatio.Required(ATTR_SUNDAY_TEMPERATURES): probatio.All(
+            ensure_list, [probatio.Coerce(float)]
+        ),
+    }
 )
 
-SCHEMA_CREATE_PROFILE_TWO = probatio.All(
-    *_TARGET_KEY_DEPRECATIONS,
-    probatio.Schema(
-        {
-            **PARTIAL_SCHEMA_PROFILE_CREATE,
-            probatio.Required(ATTR_MONDAY_TIMES): probatio.All(ensure_list, [time_str]),
-            probatio.Required(ATTR_MONDAY_TEMPERATURES): probatio.All(
-                ensure_list, [probatio.Coerce(float)]
-            ),
-            probatio.Required(ATTR_SUNDAY_TIMES): probatio.All(ensure_list, [time_str]),
-            probatio.Required(ATTR_SUNDAY_TEMPERATURES): probatio.All(
-                ensure_list, [probatio.Coerce(float)]
-            ),
-        }
-    ),
-    _HAS_TARGET_ID_KEYS_OR_CONFIG_ENTRY,
+SCHEMA_CREATE_PROFILE_TWO = cv.make_entity_service_schema(
+    {
+        **PARTIAL_SCHEMA_PROFILE_CREATE,
+        probatio.Required(ATTR_MONDAY_TIMES): probatio.All(ensure_list, [time_str]),
+        probatio.Required(ATTR_MONDAY_TEMPERATURES): probatio.All(
+            ensure_list, [probatio.Coerce(float)]
+        ),
+        probatio.Required(ATTR_SUNDAY_TIMES): probatio.All(ensure_list, [time_str]),
+        probatio.Required(ATTR_SUNDAY_TEMPERATURES): probatio.All(
+            ensure_list, [probatio.Coerce(float)]
+        ),
+    }
 )
 
-SCHEMA_CREATE_PROFILE_SEVEN = probatio.All(
-    *_TARGET_KEY_DEPRECATIONS,
-    probatio.Schema(
-        {
-            **PARTIAL_SCHEMA_PROFILE_CREATE,
-            probatio.Required(ATTR_MONDAY_TIMES): probatio.All(ensure_list, [time_str]),
-            probatio.Required(ATTR_MONDAY_TEMPERATURES): probatio.All(
-                ensure_list, [probatio.Coerce(float)]
-            ),
-            probatio.Required(ATTR_TUESDAY_TIMES): probatio.All(
-                ensure_list, [time_str]
-            ),
-            probatio.Required(ATTR_TUESDAY_TEMPERATURES): probatio.All(
-                ensure_list, [probatio.Coerce(float)]
-            ),
-            probatio.Required(ATTR_WEDNESDAY_TIMES): probatio.All(
-                ensure_list, [time_str]
-            ),
-            probatio.Required(ATTR_WEDNESDAY_TEMPERATURES): probatio.All(
-                ensure_list, [probatio.Coerce(float)]
-            ),
-            probatio.Required(ATTR_THURSDAY_TIMES): probatio.All(
-                ensure_list, [time_str]
-            ),
-            probatio.Required(ATTR_THURSDAY_TEMPERATURES): probatio.All(
-                ensure_list, [probatio.Coerce(float)]
-            ),
-            probatio.Required(ATTR_FRIDAY_TIMES): probatio.All(ensure_list, [time_str]),
-            probatio.Required(ATTR_FRIDAY_TEMPERATURES): probatio.All(
-                ensure_list, [probatio.Coerce(float)]
-            ),
-            probatio.Required(ATTR_SATURDAY_TIMES): probatio.All(
-                ensure_list, [time_str]
-            ),
-            probatio.Required(ATTR_SATURDAY_TEMPERATURES): probatio.All(
-                ensure_list, [probatio.Coerce(float)]
-            ),
-            probatio.Required(ATTR_SUNDAY_TIMES): probatio.All(ensure_list, [time_str]),
-            probatio.Required(ATTR_SUNDAY_TEMPERATURES): probatio.All(
-                ensure_list, [probatio.Coerce(float)]
-            ),
-        }
-    ),
-    _HAS_TARGET_ID_KEYS_OR_CONFIG_ENTRY,
+SCHEMA_CREATE_PROFILE_SEVEN = cv.make_entity_service_schema(
+    {
+        **PARTIAL_SCHEMA_PROFILE_CREATE,
+        probatio.Required(ATTR_MONDAY_TIMES): probatio.All(ensure_list, [time_str]),
+        probatio.Required(ATTR_MONDAY_TEMPERATURES): probatio.All(
+            ensure_list, [probatio.Coerce(float)]
+        ),
+        probatio.Required(ATTR_TUESDAY_TIMES): probatio.All(ensure_list, [time_str]),
+        probatio.Required(ATTR_TUESDAY_TEMPERATURES): probatio.All(
+            ensure_list, [probatio.Coerce(float)]
+        ),
+        probatio.Required(ATTR_WEDNESDAY_TIMES): probatio.All(ensure_list, [time_str]),
+        probatio.Required(ATTR_WEDNESDAY_TEMPERATURES): probatio.All(
+            ensure_list, [probatio.Coerce(float)]
+        ),
+        probatio.Required(ATTR_THURSDAY_TIMES): probatio.All(ensure_list, [time_str]),
+        probatio.Required(ATTR_THURSDAY_TEMPERATURES): probatio.All(
+            ensure_list, [probatio.Coerce(float)]
+        ),
+        probatio.Required(ATTR_FRIDAY_TIMES): probatio.All(ensure_list, [time_str]),
+        probatio.Required(ATTR_FRIDAY_TEMPERATURES): probatio.All(
+            ensure_list, [probatio.Coerce(float)]
+        ),
+        probatio.Required(ATTR_SATURDAY_TIMES): probatio.All(ensure_list, [time_str]),
+        probatio.Required(ATTR_SATURDAY_TEMPERATURES): probatio.All(
+            ensure_list, [probatio.Coerce(float)]
+        ),
+        probatio.Required(ATTR_SUNDAY_TIMES): probatio.All(ensure_list, [time_str]),
+        probatio.Required(ATTR_SUNDAY_TEMPERATURES): probatio.All(
+            ensure_list, [probatio.Coerce(float)]
+        ),
+    }
 )
 
-SCHEMA_CREATE_TIMER_PROFILE_ONE = probatio.All(
-    *_TARGET_KEY_DEPRECATIONS,
-    probatio.Schema(
-        {
-            **PARTIAL_SCHEMA_PROFILE_CREATE,
-            probatio.Required(ATTR_SUNDAY_ON_TIMES): probatio.All(
-                ensure_list, [time_str]
-            ),
-            probatio.Required(ATTR_SUNDAY_OFF_TIMES): probatio.All(
-                ensure_list, [time_str]
-            ),
-        }
-    ),
-    _HAS_TARGET_ID_KEYS_OR_CONFIG_ENTRY,
+SCHEMA_CREATE_TIMER_PROFILE_ONE = cv.make_entity_service_schema(
+    {
+        **PARTIAL_SCHEMA_PROFILE_CREATE,
+        probatio.Required(ATTR_SUNDAY_ON_TIMES): probatio.All(ensure_list, [time_str]),
+        probatio.Required(ATTR_SUNDAY_OFF_TIMES): probatio.All(ensure_list, [time_str]),
+    }
 )
 
-SCHEMA_CREATE_TIMER_PROFILE_TWO = probatio.All(
-    *_TARGET_KEY_DEPRECATIONS,
-    probatio.Schema(
-        {
-            **PARTIAL_SCHEMA_PROFILE_CREATE,
-            probatio.Required(ATTR_MONDAY_ON_TIMES): probatio.All(
-                ensure_list, [time_str]
-            ),
-            probatio.Required(ATTR_MONDAY_OFF_TIMES): probatio.All(
-                ensure_list, [time_str]
-            ),
-            probatio.Required(ATTR_SUNDAY_ON_TIMES): probatio.All(
-                ensure_list, [time_str]
-            ),
-            probatio.Required(ATTR_SUNDAY_OFF_TIMES): probatio.All(
-                ensure_list, [time_str]
-            ),
-        }
-    ),
-    _HAS_TARGET_ID_KEYS_OR_CONFIG_ENTRY,
+SCHEMA_CREATE_TIMER_PROFILE_TWO = cv.make_entity_service_schema(
+    {
+        **PARTIAL_SCHEMA_PROFILE_CREATE,
+        probatio.Required(ATTR_MONDAY_ON_TIMES): probatio.All(ensure_list, [time_str]),
+        probatio.Required(ATTR_MONDAY_OFF_TIMES): probatio.All(ensure_list, [time_str]),
+        probatio.Required(ATTR_SUNDAY_ON_TIMES): probatio.All(ensure_list, [time_str]),
+        probatio.Required(ATTR_SUNDAY_OFF_TIMES): probatio.All(ensure_list, [time_str]),
+    }
 )
 
-SCHEMA_CREATE_TIMER_PROFILE_SEVEN = probatio.All(
-    *_TARGET_KEY_DEPRECATIONS,
-    probatio.Schema(
-        {
-            **PARTIAL_SCHEMA_PROFILE_CREATE,
-            probatio.Required(ATTR_MONDAY_ON_TIMES): probatio.All(
-                ensure_list, [time_str]
-            ),
-            probatio.Required(ATTR_MONDAY_OFF_TIMES): probatio.All(
-                ensure_list, [time_str]
-            ),
-            probatio.Required(ATTR_TUESDAY_ON_TIMES): probatio.All(
-                ensure_list, [time_str]
-            ),
-            probatio.Required(ATTR_TUESDAY_OFF_TIMES): probatio.All(
-                ensure_list, [time_str]
-            ),
-            probatio.Required(ATTR_WEDNESDAY_ON_TIMES): probatio.All(
-                ensure_list, [time_str]
-            ),
-            probatio.Required(ATTR_WEDNESDAY_OFF_TIMES): probatio.All(
-                ensure_list, [time_str]
-            ),
-            probatio.Required(ATTR_THURSDAY_ON_TIMES): probatio.All(
-                ensure_list, [time_str]
-            ),
-            probatio.Required(ATTR_THURSDAY_OFF_TIMES): probatio.All(
-                ensure_list, [time_str]
-            ),
-            probatio.Required(ATTR_FRIDAY_ON_TIMES): probatio.All(
-                ensure_list, [time_str]
-            ),
-            probatio.Required(ATTR_FRIDAY_OFF_TIMES): probatio.All(
-                ensure_list, [time_str]
-            ),
-            probatio.Required(ATTR_SATURDAY_ON_TIMES): probatio.All(
-                ensure_list, [time_str]
-            ),
-            probatio.Required(ATTR_SATURDAY_OFF_TIMES): probatio.All(
-                ensure_list, [time_str]
-            ),
-            probatio.Required(ATTR_SUNDAY_ON_TIMES): probatio.All(
-                ensure_list, [time_str]
-            ),
-            probatio.Required(ATTR_SUNDAY_OFF_TIMES): probatio.All(
-                ensure_list, [time_str]
-            ),
-        }
-    ),
-    _HAS_TARGET_ID_KEYS_OR_CONFIG_ENTRY,
+SCHEMA_CREATE_TIMER_PROFILE_SEVEN = cv.make_entity_service_schema(
+    {
+        **PARTIAL_SCHEMA_PROFILE_CREATE,
+        probatio.Required(ATTR_MONDAY_ON_TIMES): probatio.All(ensure_list, [time_str]),
+        probatio.Required(ATTR_MONDAY_OFF_TIMES): probatio.All(ensure_list, [time_str]),
+        probatio.Required(ATTR_TUESDAY_ON_TIMES): probatio.All(ensure_list, [time_str]),
+        probatio.Required(ATTR_TUESDAY_OFF_TIMES): probatio.All(
+            ensure_list, [time_str]
+        ),
+        probatio.Required(ATTR_WEDNESDAY_ON_TIMES): probatio.All(
+            ensure_list, [time_str]
+        ),
+        probatio.Required(ATTR_WEDNESDAY_OFF_TIMES): probatio.All(
+            ensure_list, [time_str]
+        ),
+        probatio.Required(ATTR_THURSDAY_ON_TIMES): probatio.All(
+            ensure_list, [time_str]
+        ),
+        probatio.Required(ATTR_THURSDAY_OFF_TIMES): probatio.All(
+            ensure_list, [time_str]
+        ),
+        probatio.Required(ATTR_FRIDAY_ON_TIMES): probatio.All(ensure_list, [time_str]),
+        probatio.Required(ATTR_FRIDAY_OFF_TIMES): probatio.All(ensure_list, [time_str]),
+        probatio.Required(ATTR_SATURDAY_ON_TIMES): probatio.All(
+            ensure_list, [time_str]
+        ),
+        probatio.Required(ATTR_SATURDAY_OFF_TIMES): probatio.All(
+            ensure_list, [time_str]
+        ),
+        probatio.Required(ATTR_SUNDAY_ON_TIMES): probatio.All(ensure_list, [time_str]),
+        probatio.Required(ATTR_SUNDAY_OFF_TIMES): probatio.All(ensure_list, [time_str]),
+    }
 )
+
+
+def _get_hub_device_id_from_config_entry_id(
+    hass: HomeAssistant, config_entry_id: str
+) -> str | None:
+    """Get the device id of the hub from the config entry id."""
+    device_registry = dr.async_get(hass)
+    device_ids = [
+        device_entry.id
+        for device_entry in dr.async_entries_for_config_entry(
+            device_registry, config_entry_id
+        )
+        if device_entry.via_device_id is None
+    ]
+    if len(device_ids) == 1:
+        return device_ids[0]
+    return None
 
 
 def _extract_config_entry_id_from_service_call(
     hass: HomeAssistant, call: ServiceCall
-) -> tuple[HeatmiserNeoConfigEntry, str]:
+) -> list[tuple[HeatmiserNeoConfigEntry, str]]:
     """Extract config entry id from target selector."""
-    config_entry: HeatmiserNeoConfigEntry
-    requested_entity_id: str = None
-    if call.data.get(ATTR_CONFIG_ENTRY_ID):
-        config_entry: HeatmiserNeoConfigEntry = _validate_config_entry(
-            call.hass, call.data[ATTR_CONFIG_ENTRY_ID]
-        )
-    else:
-        ref = async_extract_referenced_entity_ids(call.hass, TargetSelection(call.data))
-        entity_registry = er.async_get(call.hass)
-        entity_entries = [
-            entity_registry.async_get(entity_id)
-            for entity_id in ref.referenced | ref.indirectly_referenced
-        ]
+    ref = async_extract_referenced_entity_ids(call.hass, TargetSelection(call.data))
+    entity_registry = er.async_get(call.hass)
 
-        config_entries = {
-            entry.config_entry_id
-            for entry in entity_entries
-            if entry and entry.config_entry_id and entry.platform == DOMAIN
+    entity_entries = [
+        entity_registry.async_get(entity_id)
+        for entity_id in ref.referenced | ref.indirectly_referenced
+    ]
+
+    config_entry_ids = {
+        entry.config_entry_id
+        for entry in entity_entries
+        if entry and entry.config_entry_id and entry.platform == DOMAIN
+    }
+
+    if len(config_entry_ids) == 0:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="config_entry_not_found_from_target_selector",
+        )
+
+    config_entries = {
+        config_entry_id: {
+            entity_entry.entity_id
+            for entity_entry in entity_entries
+            if entity_entry.config_entry_id == config_entry_id
+            and entity_entry.entity_id in ref.referenced
         }
+        for config_entry_id in config_entry_ids
+    }
 
-        if len(config_entries) == 0:
-            raise ServiceValidationError(
-                translation_domain=DOMAIN,
-                translation_key="config_entry_not_found_from_target_selector",
-            )
-        if len(config_entries) > 1:
-            raise ServiceValidationError(
-                translation_domain=DOMAIN,
-                translation_key="no_unique_config_entry_found_from_target_selector",
-            )
-        config_entry: HeatmiserNeoConfigEntry = _validate_config_entry(
-            call.hass, config_entries.pop()
+    return [
+        (
+            _validate_config_entry(hass, config_entry_id),
+            next(iter(entity_list))
+            if len(entity_list) == 1
+            else _get_hub_device_id_from_config_entry_id(hass, config_entry_id),
         )
-
-        ir.async_create_issue(
-            hass,
-            DOMAIN,
-            f"deprecated_target_selector_service_{call.service}",
-            breaks_in_ha_version="2027.6.0",
-            is_fixable=False,
-            severity=ir.IssueSeverity.WARNING,
-            translation_key="deprecated_target_selector",
-            translation_placeholders={"service_name": f"{DOMAIN}.{call.service}"},
-            config_entry_id=config_entry.entry_id,
-        )
-        requested_entity_id = (
-            next(iter(ref.referenced)) if len(ref.referenced) == 1 else None
-        )
-    return config_entry, requested_entity_id
+        for config_entry_id, entity_list in config_entries.items()
+    ]
 
 
 def _validate_config_entry(
@@ -588,25 +481,25 @@ def _validate_device_id(
 
 async def _async_set_away_mode(call: ServiceCall) -> None:
     """Set away mode on the hub."""
-    config_entry, _ = _extract_config_entry_id_from_service_call(call.hass, call)
+    config_entries = _extract_config_entry_id_from_service_call(call.hass, call)
 
     state = call.data[ATTR_AWAY_STATE]
+    end_date: dt.datetime | None = call.data.get(ATTR_AWAY_END)
 
-    coordinator = config_entry.runtime_data.coordinator
-    hub = config_entry.runtime_data.hub
+    for config_entry, _ in config_entries:
+        coordinator = config_entry.runtime_data.coordinator
+        hub = config_entry.runtime_data.hub
 
-    holiday = None
-    away = None
-    if not state:
-        if coordinator.live_data.HUB_AWAY:
-            await hub.set_away(False)
-            away = False
-        if coordinator.live_data.HUB_HOLIDAY:
-            await hub.cancel_holiday()
-            holiday = False
-    else:
-        end_date: dt.datetime | None = call.data.get(ATTR_AWAY_END)
-        if end_date:
+        holiday = None
+        away = None
+        if not state:
+            if coordinator.live_data.HUB_AWAY:
+                await hub.set_away(False)
+                away = False
+            if coordinator.live_data.HUB_HOLIDAY:
+                await hub.cancel_holiday()
+                holiday = False
+        elif end_date:
             if coordinator.live_data.HUB_AWAY:
                 await hub.set_away(False)
                 away = False
@@ -619,86 +512,95 @@ async def _async_set_away_mode(call: ServiceCall) -> None:
                 holiday = False
             await hub.set_away(True)
             away = True
-    if away is not None:
-        coordinator.update_in_memory_state(
-            partial(set_away, away),
-            device_supports_away,
-        )
-        coordinator.live_data.HUB_AWAY = away
-    if holiday is not None:
-        coordinator.update_in_memory_state(
-            partial(set_holiday, holiday),
-            device_supports_away,
-        )
-        coordinator.live_data.HUB_HOLIDAY = holiday
+
+        if away is not None:
+            coordinator.update_in_memory_state(
+                partial(set_away, away),
+                device_supports_away,
+            )
+            coordinator.live_data.HUB_AWAY = away
+        if holiday is not None:
+            coordinator.update_in_memory_state(
+                partial(set_holiday, holiday),
+                device_supports_away,
+            )
+            coordinator.live_data.HUB_HOLIDAY = holiday
 
 
 async def _async_rename_profile(call: ServiceCall) -> None:
     """Rename a profile."""
-    config_entry, _ = _extract_config_entry_id_from_service_call(call.hass, call)
-
-    coordinator = config_entry.runtime_data.coordinator
-    hub = config_entry.runtime_data.hub
+    config_entries = _extract_config_entry_id_from_service_call(call.hass, call)
 
     old_name = call.data[ATTR_NAME_OLD]
     new_name = call.data[ATTR_NAME_NEW]
-    profile_id, timer = check_profile_name(old_name, coordinator)
-    conflicting_profile_id, _ = check_profile_name(new_name, coordinator)
-    if not profile_id:
-        raise HomeAssistantError(f"Old name '{old_name}' does not exist")
-    if conflicting_profile_id:
-        raise HomeAssistantError(f"New name '{new_name}' already in use")
 
-    await hub.rename_profile(old_name, new_name)
-    if timer:
-        coordinator.timer_profiles[profile_id].name = new_name
-    else:
-        coordinator.profiles[profile_id].name = new_name
+    for config_entry, _ in config_entries:
+        coordinator = config_entry.runtime_data.coordinator
+        hub = config_entry.runtime_data.hub
+        profile_id, timer = check_profile_name(old_name, coordinator)
+        conflicting_profile_id, _ = check_profile_name(new_name, coordinator)
+        if not profile_id:
+            raise HomeAssistantError(f"Old name '{old_name}' does not exist")
+        if conflicting_profile_id:
+            raise HomeAssistantError(f"New name '{new_name}' already in use")
+
+    for config_entry, _ in config_entries:
+        coordinator = config_entry.runtime_data.coordinator
+        hub = config_entry.runtime_data.hub
+        profile_id, timer = check_profile_name(old_name, coordinator)
+        await hub.rename_profile(old_name, new_name)
+        if timer:
+            coordinator.timer_profiles[profile_id].name = new_name
+        else:
+            coordinator.profiles[profile_id].name = new_name
 
 
 async def _async_delete_profile(call: ServiceCall) -> None:
     """Delete a profile."""
-    config_entry, _ = _extract_config_entry_id_from_service_call(call.hass, call)
-
-    coordinator = config_entry.runtime_data.coordinator
-    hub = config_entry.runtime_data.hub
+    config_entries = _extract_config_entry_id_from_service_call(call.hass, call)
 
     profile_name = call.data[ATTR_NAME]
-    profile_id, timer = check_profile_name(profile_name, coordinator)
-    if not profile_id:
-        raise HomeAssistantError(f"Profile '{profile_name}' does not exist")
 
-    await hub.delete_profile(profile_name)
-    if timer:
-        del coordinator.timer_profiles[profile_id]
-    else:
-        del coordinator.profiles[profile_id]
+    for config_entry, _ in config_entries:
+        coordinator = config_entry.runtime_data.coordinator
+        hub = config_entry.runtime_data.hub
+        profile_id, timer = check_profile_name(profile_name, coordinator)
+        if not profile_id:
+            raise HomeAssistantError(f"Profile '{profile_name}' does not exist")
+
+    for config_entry, _ in config_entries:
+        coordinator = config_entry.runtime_data.coordinator
+        hub = config_entry.runtime_data.hub
+        profile_id, timer = check_profile_name(profile_name, coordinator)
+        await hub.delete_profile(profile_name)
+        if timer:
+            del coordinator.timer_profiles[profile_id]
+        else:
+            del coordinator.profiles[profile_id]
 
 
 async def _async_get_profile_definitions(call: ServiceCall) -> ServiceResponse:
     """Get definitions of all profiles."""
-    config_entry, requested_entity_id = _extract_config_entry_id_from_service_call(
-        call.hass, call
-    )
-
-    coordinator = config_entry.runtime_data.coordinator
+    config_entries = _extract_config_entry_id_from_service_call(call.hass, call)
 
     friendly_mode = call.data.get(ATTR_FRIENDLY_MODE, False)
 
-    heating: JsonValueType = {
-        str(p.name): get_profile_definition(k, coordinator, friendly_mode)
-        for k, p in coordinator.profiles.items()
-    }
-    timers: JsonValueType = {
-        str(p.name): get_profile_definition(k, coordinator, friendly_mode)
-        for k, p in coordinator.timer_profiles.items()
-    }
-
     return {
-        requested_entity_id or config_entry.entry_id: {
-            "heating_profiles": heating,
-            "timer_profiles": timers,
+        requested_entity_id_or_device_id or config_entry.entry_id: {
+            "heating_profiles": {
+                str(p.name): get_profile_definition(
+                    k, config_entry.runtime_data.coordinator, friendly_mode
+                )
+                for k, p in config_entry.runtime_data.coordinator.profiles.items()
+            },
+            "timer_profiles": {
+                str(p.name): get_profile_definition(
+                    k, config_entry.runtime_data.coordinator, friendly_mode
+                )
+                for k, p in config_entry.runtime_data.coordinator.timer_profiles.items()
+            },
         }
+        for config_entry, requested_entity_id_or_device_id in config_entries
     }
 
 
@@ -761,65 +663,77 @@ async def _async_get_profile_definition(call: ServiceCall) -> ServiceResponse:
 async def _async_create_profile(
     requested_format: ScheduleFormat, timer: bool, call: ServiceCall
 ) -> None:
-    config_entry, _ = _extract_config_entry_id_from_service_call(call.hass, call)
-
-    coordinator = config_entry.runtime_data.coordinator
-    hub = config_entry.runtime_data.hub
-    _LOGGER.debug("Create profile - service_call=%s", call)
-
-    profile_format = coordinator.system_data.FORMAT
-    if timer and profile_format is ScheduleFormat.ZERO:
-        profile_format = coordinator.system_data.ALT_TIMER_FORMAT
-
-    if profile_format is ScheduleFormat.ZERO:
-        raise HomeAssistantError(
-            "Hub is in non programmable mode. Can't create profiles"
-        )
-
-    if requested_format is not profile_format:
-        raise HomeAssistantError(
-            f"Requested profile format ({requested_format}) does not match hub format ({profile_format})"
-        )
+    config_entries = _extract_config_entry_id_from_service_call(call.hass, call)
 
     create_mode = call.data.get(ATTR_CREATE_MODE, OPTION_CREATE_MODE_CREATE)
     profile_name = call.data[ATTR_NAME]
-    profile_id, timer_profile = check_profile_name(profile_name, coordinator)
 
-    if not profile_id:
-        if create_mode == OPTION_CREATE_MODE_UPDATE:
+    for config_entry, _ in config_entries:
+        coordinator = config_entry.runtime_data.coordinator
+        hub = config_entry.runtime_data.hub
+
+        profile_format = coordinator.system_data.FORMAT
+        if timer and profile_format is ScheduleFormat.ZERO:
+            profile_format = coordinator.system_data.ALT_TIMER_FORMAT
+
+        if profile_format is ScheduleFormat.ZERO:
             raise HomeAssistantError(
-                f"Could not find existing profile with name '{profile_name}'"
-            )
-    else:
-        if create_mode == OPTION_CREATE_MODE_CREATE:
-            raise HomeAssistantError(
-                f"A profile with name '{profile_name}' already exists"
-            )
-        if timer != timer_profile:
-            raise HomeAssistantError(
-                f"A {'heating' if timer else 'timer'} profile with name '{profile_name}' already exists"
+                "Hub is in non programmable mode. Can't create profiles"
             )
 
-    heating_levels = 4 if timer else coordinator.system_data.HEATING_LEVELS
+        if requested_format is not profile_format:
+            raise HomeAssistantError(
+                f"Requested profile format ({requested_format}) does not match hub format ({profile_format})"
+            )
 
-    weekdays = SCHEDULE_WEEKDAYS[profile_format]
-    weekday_levels = {
-        wd: _convert_to_profile_info(call, wd, heating_levels, timer) for wd in weekdays
-    }
+        profile_id, timer_profile = check_profile_name(profile_name, coordinator)
 
-    msg_details = {}
-    if profile_id:
-        msg_details["ID"] = profile_id
-    msg_details["info"] = weekday_levels
-    msg_details["name"] = profile_name
+        if not profile_id:
+            if create_mode == OPTION_CREATE_MODE_UPDATE:
+                raise HomeAssistantError(
+                    f"Could not find existing profile with name '{profile_name}'"
+                )
+        else:
+            if create_mode == OPTION_CREATE_MODE_CREATE:
+                raise HomeAssistantError(
+                    f"A profile with name '{profile_name}' already exists"
+                )
+            if timer != timer_profile:
+                raise HomeAssistantError(
+                    f"A {'heating' if timer else 'timer'} profile with name '{profile_name}' already exists"
+                )
 
-    msg = {"STORE_PROFILE": msg_details}
-    reply = {"result": "profile created"}
+    for config_entry, _ in config_entries:
+        coordinator = config_entry.runtime_data.coordinator
+        hub = config_entry.runtime_data.hub
 
-    _LOGGER.debug("Create profile - msg=%s", json.dumps(msg))
-    await hub._send(msg, reply)  # noqa: SLF001
+        profile_id, timer_profile = check_profile_name(profile_name, coordinator)
 
-    await coordinator.async_request_refresh()
+        profile_format = coordinator.system_data.FORMAT
+        if timer and profile_format is ScheduleFormat.ZERO:
+            profile_format = coordinator.system_data.ALT_TIMER_FORMAT
+
+        heating_levels = 4 if timer else coordinator.system_data.HEATING_LEVELS
+
+        weekdays = SCHEDULE_WEEKDAYS[profile_format]
+        weekday_levels = {
+            wd: _convert_to_profile_info(call, wd, heating_levels, timer)
+            for wd in weekdays
+        }
+
+        msg_details = {}
+        if profile_id:
+            msg_details["ID"] = profile_id
+        msg_details["info"] = weekday_levels
+        msg_details["name"] = profile_name
+
+        msg = {"STORE_PROFILE": msg_details}
+        reply = {"result": "profile created"}
+
+        _LOGGER.debug("Create profile - msg=%s", json.dumps(msg))
+        await hub._send(msg, reply)  # noqa: SLF001
+
+        await coordinator.async_request_refresh()
 
 
 def _convert_to_profile_info(
