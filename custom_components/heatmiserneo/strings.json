@@ -419,10 +419,6 @@
           }
         }
       }
-    },
-    "deprecated_target_selector": {
-      "description": "The target selector has been deprecated in service {service_name}. Please use the config_entry_id field instead which targets the hub directly. Support for the target selector (entity_id, device_id, floor_id, area_id or label_id) will be removed in a future release.",
-      "title": "Target selector is deprecated in service {service_name}"
     }
   },
   "exceptions": {
